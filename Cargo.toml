@@ -1,0 +1,7 @@
+[package]
+name = "ledger-cosmos-rs"
+version = "0.1.0"
+authors = ["Juan Leni <lenijuan@gmail.com>"]
+
+[dependencies]
+ledger = "0.0.4"
