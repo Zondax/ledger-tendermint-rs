@@ -1,7 +1,17 @@
 [package]
 name = "ledger-cosmos-rs"
-version = "0.1.0"
-authors = ["Juan Leni <lenijuan@gmail.com>"]
+version = "0.0.1"
+authors = ["ZondaX GmbH <info@zondax.ch>"]
+description = "Library to integrate with ledger nano s apps"
+homepage = "https://github.com/ZondaX/ledger-cosmos-rs"
+repository = "https://github.com/ZondaX/ledger-cosmos-rs"
+readme = "README.md"
+
+license = "Apache-2.0"
+keywords = ["ledger", "nano", "blue", "apdu"]
+
+[lib]
+name = "ledger"
 
 [dependencies]
 ledger = "0.0.4"
