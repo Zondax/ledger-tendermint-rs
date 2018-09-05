@@ -11,7 +11,8 @@ license = "Apache-2.0"
 keywords = ["ledger", "nano", "blue", "apdu"]
 
 [lib]
-name = "ledger"
+name = "ledger_cosmos_rs"
 
 [dependencies]
 ledger = "0.0.4"
+quick-error = "1.2.2"
