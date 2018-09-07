@@ -16,11 +16,11 @@
 //! Provider for Ledger cosmos validator app
 #[macro_use]
 extern crate quick_error;
-extern crate byteorder;
-extern crate ledger;
-
 #[macro_use]
 extern crate matches;
+
+extern crate byteorder;
+extern crate ledger;
 
 const CLA: u8 = 0x56;
 const INS_GET_VERSION: u8 = 0x00;
@@ -50,6 +50,7 @@ quick_error! {
     }
 }
 
+#[allow(dead_code)]
 pub struct CosmosValidatorApp
 {
     app: ledger::LedgerApp
