@@ -16,3 +16,5 @@ name = "ledger_cosmos_rs"
 [dependencies]
 ledger = "0.0.4"
 quick-error = "1.2.2"
+byteorder = "1.2.4"
+matches = "0.1.8"
