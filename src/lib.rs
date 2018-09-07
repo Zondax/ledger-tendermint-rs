@@ -16,6 +16,8 @@
 //! Provider for Ledger cosmos validator app
 #[macro_use]
 extern crate quick_error;
+
+#[cfg(test)]
 #[macro_use]
 extern crate matches;
 
