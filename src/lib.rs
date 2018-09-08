@@ -43,6 +43,12 @@ quick_error! {
         InvalidMessageSize{
             description("message size is invalid (too big)")
         }
+        InvalidPK{
+            description("received an invalid PK")
+        }
+        InvalidSignature {
+            description("received an invalid signature")
+        }
         Ledger ( err: ledger::Error ) {
             from()
             description("ledger error")
@@ -57,6 +63,8 @@ pub struct CosmosValidatorApp
 {
     app: ledger::LedgerApp
 }
+
+unsafe impl Send for CosmosValidatorApp {}
 
 #[allow(dead_code)]
 pub struct Version {
@@ -118,7 +126,7 @@ impl CosmosValidatorApp {
         return Result::Ok(version);
     }
 
-    pub fn public_key(&self) -> Result<Vec<u8>, Error> {
+    pub fn public_key(&self) -> Result<[u8; 32 ], Error> {
         use ledger::{ApduCommand, LedgerApp};
 
         let app = LedgerApp::connect()?;
@@ -146,11 +154,17 @@ impl CosmosValidatorApp {
             println!("WARNING: retcode={:X?}", response.retcode);
         }
 
-        Ok(response.data)
+        if response.data.len()!=32 {
+            return Err(Error::InvalidPK);
+        }
+
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&response.data[..32]);
+        Ok(array)
     }
 
     // Sign message
-    pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn sign(&self, message: &[u8]) -> Result<[u8; 64], Error> {
         use ledger::{ApduCommand, LedgerApp};
 
         let app = LedgerApp::connect()?;
@@ -202,7 +216,13 @@ impl CosmosValidatorApp {
         }
 
         // Last response should contain the answer
-        Ok(response.data)
+        if response.data.len()!=64 {
+            return Err(Error::InvalidSignature);
+        }
+
+        let mut array = [0u8; 64];
+        array.copy_from_slice(&response.data[..64]);
+        Ok(array)
     }
 }
 
@@ -214,23 +234,23 @@ mod tests {
 
         let mut answer = to_bip32array(&vec![1]).unwrap();
         assert_eq!(answer, b"\x01\
-                             \x00\x00\x00\x01");
+                             \x01\x00\x00\x00");
 
         answer = to_bip32array(&vec![1, 2]).unwrap();
         assert_eq!(answer, b"\x02\
-                             \x00\x00\x00\x01\
-                             \x00\x00\x00\x02");
+                             \x01\x00\x00\x00\
+                             \x02\x00\x00\x00");
 
         answer = to_bip32array(&vec![1, 2, 12345]).unwrap();
         assert_eq!(answer, b"\x03\
-                             \x00\x00\x00\x01\
-                             \x00\x00\x00\x02\
-                             \x00\x00\x30\x39");
+                             \x01\x00\x00\x00\
+                             \x02\x00\x00\x00\
+                             \x39\x30\x00\x00");
 
         answer = to_bip32array(&vec![0x44, 0x60, 0, 0, 0]).unwrap();
         assert_eq!(answer, b"\x05\
-                             \x00\x00\x00\x44\
-                             \x00\x00\x00\x60\
+                             \x44\x00\x00\x00\
+                             \x60\x00\x00\x00\
                              \x00\x00\x00\x00\
                              \x00\x00\x00\x00\
                              \x00\x00\x00\x00");
@@ -243,11 +263,11 @@ mod tests {
             0 | 0x80000000]).unwrap();
 
         assert_eq!(answer, b"\x05\
-                             \x80\x00\x00\x44\
-                             \x80\x00\x00\x60\
-                             \x80\x00\x00\x00\
-                             \x80\x00\x00\x00\
-                             \x80\x00\x00\x00");
+                             \x44\x00\x00\x80\
+                             \x60\x00\x00\x80\
+                             \x00\x00\x00\x80\
+                             \x00\x00\x00\x80\
+                             \x00\x00\x00\x80");
     }
 
     #[test]
@@ -300,9 +320,9 @@ mod tests {
         let some_message2 = b"{\"height\":2,\"other\":\"Some dummy data\",\"round\":0}";
 
         let signature = app.sign(some_message1).unwrap();
-        println!("{:?}", signature);
+        println!("{:#?}", signature.to_vec());
 
         let signature = app.sign(some_message2).unwrap();
-        println!("{:?}", signature);
+        println!("{:#?}", signature.to_vec());
     }
 }
