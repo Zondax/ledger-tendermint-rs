@@ -64,7 +64,7 @@ pub struct CosmosValidatorApp
     app: ledger::LedgerApp
 }
 
-//unsafe impl Send for CosmosValidatorApp {}
+unsafe impl Send for CosmosValidatorApp {}
 
 #[allow(dead_code)]
 pub struct Version {
