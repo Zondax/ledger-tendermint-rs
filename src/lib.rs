@@ -64,7 +64,7 @@ pub struct CosmosValidatorApp
     app: ledger::LedgerApp
 }
 
-unsafe impl Send for CosmosValidatorApp {}
+//unsafe impl Send for CosmosValidatorApp {}
 
 #[allow(dead_code)]
 pub struct Version {
@@ -91,14 +91,12 @@ fn to_bip32array(path: &Vec<u32>) -> Result<Vec<u8>, Error> {
 
 impl CosmosValidatorApp {
     pub fn connect() -> Result<Self, Error> {
-        let app = ledger::LedgerApp::connect()?;
+        let app = ledger::LedgerApp::new()?;
         Ok(CosmosValidatorApp { app })
     }
 
     pub fn version(&self) -> Result<Version, Error> {
-        use ledger::{ApduCommand, LedgerApp};
-
-        let app = LedgerApp::connect()?;
+        use ledger::ApduCommand;
 
         let command = ApduCommand {
             cla: CLA,
@@ -109,7 +107,7 @@ impl CosmosValidatorApp {
             data: Vec::new(),
         };
 
-        let response = app.exchange(command)?;
+        let response = self.app.exchange(command)?;
 
         // TODO: this is just temporary, ledger errors should check for 0x9000
         if response.retcode != 0x9000 {
@@ -127,9 +125,7 @@ impl CosmosValidatorApp {
     }
 
     pub fn public_key(&self) -> Result<[u8; 32 ], Error> {
-        use ledger::{ApduCommand, LedgerApp};
-
-        let app = LedgerApp::connect()?;
+        use ledger::ApduCommand;
 
         // TODO: Define what to do with the derivation path
         let mut bip32 = vec![44, 60, 0, 0, 0];
@@ -148,7 +144,7 @@ impl CosmosValidatorApp {
             data: bip32path,
         };
 
-        let response = app.exchange(command)?;
+        let response = self.app.exchange(command)?;
 
         if response.retcode != 0x9000 {
             println!("WARNING: retcode={:X?}", response.retcode);
@@ -165,9 +161,7 @@ impl CosmosValidatorApp {
 
     // Sign message
     pub fn sign(&self, message: &[u8]) -> Result<[u8; 64], Error> {
-        use ledger::{ApduCommand, LedgerApp};
-
-        let app = LedgerApp::connect()?;
+        use ledger::ApduCommand;
 
         let mut bip32 = vec![44, 60, 0, 0, 0];
         for i in &mut bip32 {
@@ -197,7 +191,7 @@ impl CosmosValidatorApp {
             length: bip32path.len() as u8,
             data: bip32path,
         };
-        let mut response = app.exchange(command)?;
+        let mut response = self.app.exchange(command)?;
 
         // Send message chunks
         for chunk in chunks {
@@ -212,7 +206,7 @@ impl CosmosValidatorApp {
                 data: chunk.to_vec(),
             };
 
-            response = app.exchange(command)?;
+            response = self.app.exchange(command)?;
         }
 
         // Last response should contain the answer
