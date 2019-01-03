@@ -207,9 +207,6 @@ impl CosmosValidatorApp {
 
 #[cfg(test)]
 mod tests {
-    use std::time;
-    use std::thread;
-
     #[test]
     fn derivation_path() {
         use to_bip32array;
@@ -262,7 +259,7 @@ mod tests {
 
         assert_eq!(version.mode, 0xFF);
         assert_eq!(version.major, 0x00);
-        assert_eq!(version.minor, 0x01);
+        assert_eq!(version.minor, 0x02);
         assert_eq!(version.patch, 0x00);
     }
 
@@ -327,8 +324,10 @@ mod tests {
             // remaining fields (timestamp):
             0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
 
-        let signature = app.sign(&some_message1).unwrap();
-        println!("{:#?}", signature.to_vec());
+        match app.sign(&some_message1) {
+            Ok(sig) => { println!("{:#?}", sig.to_vec()); }
+            Err(e) => { println!("Err {:#?}", e); }
+        }
 
         let some_message2 = [
             0x8,                                    // (field_number << 3) | wire_type
@@ -341,8 +340,10 @@ mod tests {
             // remaining fields (timestamp):
             0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
 
-        let signature = app.sign(&some_message2).unwrap();
-        println!("{:#?}", signature.to_vec());
+        match app.sign(&some_message2) {
+            Ok(sig) => { println!("{:#?}", sig.to_vec()); }
+            Err(e) => { println!("Err {:#?}", e); }
+        }
     }
 
     #[test]
@@ -379,12 +380,8 @@ mod tests {
 
             let signature = app.sign(&some_message1);
             match signature {
-                Ok(sig) => {
-//                    println!("{:#?}", sig.to_vec());
-                }
-                Err(e) => {
-                    println!("Err {:#?}", e);
-                }
+                Ok(sig) => { println!("{:#?}", sig.to_vec()); }
+                Err(e) => { println!("Err {:#?}", e); }
             }
         }
     }
