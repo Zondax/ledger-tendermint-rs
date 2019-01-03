@@ -178,14 +178,14 @@ impl CosmosValidatorApp {
         }
 
         let packet_count = chunks.len() as u8;
-        let mut response: ApduAnswer = ApduAnswer{ data: vec![], retcode: 0 };
+        let mut response: ApduAnswer = ApduAnswer { data: vec![], retcode: 0 };
 
         // Send message chunks
         for (packet_idx, chunk) in chunks.enumerate() {
             let _command = ApduCommand {
                 cla: CLA,
                 ins: INS_SIGN_ED25519,
-                p1: packet_idx as u8,
+                p1: (packet_idx + 1) as u8,
                 p2: packet_count,
                 length: chunk.len() as u8,
                 data: chunk.to_vec(),
@@ -276,13 +276,12 @@ mod tests {
         match resp {
             Ok(pk) => {
                 assert_eq!(pk.len(), 32);
-                println!("{:?}", pk);
+                println!("PK {:0X?}", pk);
             }
             Err(err) => {
                 eprintln!("Error: {:?}", err);
             }
         }
-
     }
 
     #[test]
@@ -310,14 +309,14 @@ mod tests {
         match resp {
             Ok(pk) => {
                 assert_eq!(pk.len(), 32);
-                println!("{:?}", pk);
+                println!("PK {:0X?}", pk);
             }
             Err(err) => {
                 eprintln!("Error: {:?}", err);
             }
         }
 
-        let some_message1= [
+        let some_message1 = [
             0x8,                                    // (field_number << 3) | wire_type
             0x1,                                    // PrevoteType
             0x11,                                   // (field_number << 3) | wire_type
@@ -331,7 +330,7 @@ mod tests {
         let signature = app.sign(&some_message1).unwrap();
         println!("{:#?}", signature.to_vec());
 
-        let some_message2= [
+        let some_message2 = [
             0x8,                                    // (field_number << 3) | wire_type
             0x1,                                    // PrevoteType
             0x11,                                   // (field_number << 3) | wire_type
@@ -382,7 +381,7 @@ mod tests {
             match signature {
                 Ok(sig) => {
 //                    println!("{:#?}", sig.to_vec());
-                },
+                }
                 Err(e) => {
                     println!("Err {:#?}", e);
                 }
