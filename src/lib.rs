@@ -27,7 +27,7 @@ extern crate ledger;
 const CLA: u8 = 0x56;
 const INS_GET_VERSION: u8 = 0x00;
 const INS_PUBLIC_KEY_ED25519: u8 = 0x01;
-const INS_SIGN_ED25519: u8 = 0x04;
+const INS_SIGN_ED25519: u8 = 0x02;
 
 const USER_MESSAGE_CHUNK_SIZE: usize = 250;
 
@@ -48,6 +48,9 @@ quick_error! {
         }
         InvalidSignature {
             description("received an invalid signature")
+        }
+        InvalidDerivationPath {
+            description("invalid derivation path")
         }
         Ledger ( err: ledger::Error ) {
             from()
@@ -74,11 +77,11 @@ pub struct Version {
     patch: u8,
 }
 
-fn to_bip32array(path: &Vec<u32>) -> Result<Vec<u8>, Error> {
+fn to_bip32array(path: &[u32]) -> Result<Vec<u8>, Error> {
     use byteorder::{LittleEndian, WriteBytesExt};
 
     if path.len() > 10 {
-        // TODO: return an error
+        return Err(Error::InvalidDerivationPath);
     }
 
     let mut answer = Vec::new();
@@ -121,16 +124,16 @@ impl CosmosValidatorApp {
             patch: response.data[3],
         };
 
-        return Result::Ok(version);
+        Result::Ok(version)
     }
 
-    pub fn public_key(&self) -> Result<[u8; 32 ], Error> {
+    pub fn public_key(&self) -> Result<[u8; 32], Error> {
         use ledger::ApduCommand;
 
         // TODO: Define what to do with the derivation path
-        let mut bip32 = vec![44, 60, 0, 0, 0];
+        let mut bip32 = vec![44, 118, 0, 0, 0];
         for i in &mut bip32 {
-            *i |= 0x80000000;
+            *i |= 0x8000_0000;
         }
 
         let bip32path = to_bip32array(&bip32)?;
@@ -150,7 +153,7 @@ impl CosmosValidatorApp {
             println!("WARNING: retcode={:X?}", response.retcode);
         }
 
-        if response.data.len()!=32 {
+        if response.data.len() != 32 {
             return Err(Error::InvalidPK);
         }
 
@@ -162,12 +165,7 @@ impl CosmosValidatorApp {
     // Sign message
     pub fn sign(&self, message: &[u8]) -> Result<[u8; 64], Error> {
         use ledger::ApduCommand;
-
-        let mut bip32 = vec![44, 60, 0, 0, 0];
-        for i in &mut bip32 {
-            *i |= 0x80000000;
-        }
-        let bip32path = to_bip32array(&bip32)?;
+        use ledger::ApduAnswer;
 
         let chunks = message.chunks(USER_MESSAGE_CHUNK_SIZE);
 
@@ -179,38 +177,25 @@ impl CosmosValidatorApp {
             return Err(Error::InvalidEmptyMessage);
         }
 
-        let mut packet_idx = 1u8;
-        let packet_count = 1u8 + chunks.len() as u8;
-
-        // Send request + path
-        let command = ApduCommand {
-            cla: CLA,
-            ins: INS_SIGN_ED25519,
-            p1: packet_idx,
-            p2: packet_count,
-            length: bip32path.len() as u8,
-            data: bip32path,
-        };
-        let mut response = self.app.exchange(command)?;
+        let packet_count = chunks.len() as u8;
+        let mut response: ApduAnswer = ApduAnswer{ data: vec![], retcode: 0 };
 
         // Send message chunks
-        for chunk in chunks {
-            packet_idx += 1;
-
-            let command = ApduCommand {
+        for (packet_idx, chunk) in chunks.enumerate() {
+            let _command = ApduCommand {
                 cla: CLA,
                 ins: INS_SIGN_ED25519,
-                p1: packet_idx,
+                p1: packet_idx as u8,
                 p2: packet_count,
                 length: chunk.len() as u8,
                 data: chunk.to_vec(),
             };
 
-            response = self.app.exchange(command)?;
+            response = self.app.exchange(_command)?;
         }
 
         // Last response should contain the answer
-        if response.data.len()!=64 {
+        if response.data.len() != 64 {
             return Err(Error::InvalidSignature);
         }
 
@@ -222,6 +207,9 @@ impl CosmosValidatorApp {
 
 #[cfg(test)]
 mod tests {
+    use std::time;
+    use std::thread;
+
     #[test]
     fn derivation_path() {
         use to_bip32array;
@@ -241,24 +229,24 @@ mod tests {
                              \x02\x00\x00\x00\
                              \x39\x30\x00\x00");
 
-        answer = to_bip32array(&vec![0x44, 0x60, 0, 0, 0]).unwrap();
+        answer = to_bip32array(&vec![44, 118, 0, 0, 0]).unwrap();
         assert_eq!(answer, b"\x05\
-                             \x44\x00\x00\x00\
-                             \x60\x00\x00\x00\
+                             \x2c\x00\x00\x00\
+                             \x76\x00\x00\x00\
                              \x00\x00\x00\x00\
                              \x00\x00\x00\x00\
                              \x00\x00\x00\x00");
 
         answer = to_bip32array(&vec![
-            0x44 | 0x80000000,
-            0x60 | 0x80000000,
+            44 | 0x80000000,
+            118 | 0x80000000,
             0 | 0x80000000,
             0 | 0x80000000,
             0 | 0x80000000]).unwrap();
 
         assert_eq!(answer, b"\x05\
-                             \x44\x00\x00\x80\
-                             \x60\x00\x00\x80\
+                             \x2c\x00\x00\x80\
+                             \x76\x00\x00\x80\
                              \x00\x00\x00\x80\
                              \x00\x00\x00\x80\
                              \x00\x00\x00\x80");
@@ -274,8 +262,8 @@ mod tests {
 
         assert_eq!(version.mode, 0xFF);
         assert_eq!(version.major, 0x00);
-        assert_eq!(version.minor, 0x00);
-        assert_eq!(version.patch, 0x01);
+        assert_eq!(version.minor, 0x01);
+        assert_eq!(version.patch, 0x00);
     }
 
     #[test]
@@ -283,11 +271,18 @@ mod tests {
         use CosmosValidatorApp;
 
         let app = CosmosValidatorApp::connect().unwrap();
+        let resp = app.public_key();
 
-        let pk = app.public_key().unwrap();
-        assert_eq!(pk.len(), 32);
+        match resp {
+            Ok(pk) => {
+                assert_eq!(pk.len(), 32);
+                println!("{:?}", pk);
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+            }
+        }
 
-        println!("{:?}", pk);
     }
 
     #[test]
@@ -310,13 +305,88 @@ mod tests {
 
         let app = CosmosValidatorApp::connect().unwrap();
 
-        let some_message1 = b"{\"height\":1,\"other\":\"Some dummy data\",\"round\":0}";
-        let some_message2 = b"{\"height\":2,\"other\":\"Some dummy data\",\"round\":0}";
+        // First, get public key
+        let resp = app.public_key();
+        match resp {
+            Ok(pk) => {
+                assert_eq!(pk.len(), 32);
+                println!("{:?}", pk);
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+            }
+        }
 
-        let signature = app.sign(some_message1).unwrap();
+        let some_message1= [
+            0x8,                                    // (field_number << 3) | wire_type
+            0x1,                                    // PrevoteType
+            0x11,                                   // (field_number << 3) | wire_type
+            0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
+            0x19,                                   // (field_number << 3) | wire_type
+            0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+            0x22, // (field_number << 3) | wire_type
+            // remaining fields (timestamp):
+            0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
+
+        let signature = app.sign(&some_message1).unwrap();
         println!("{:#?}", signature.to_vec());
 
-        let signature = app.sign(some_message2).unwrap();
+        let some_message2= [
+            0x8,                                    // (field_number << 3) | wire_type
+            0x1,                                    // PrevoteType
+            0x11,                                   // (field_number << 3) | wire_type
+            0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
+            0x19,                                   // (field_number << 3) | wire_type
+            0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+            0x22, // (field_number << 3) | wire_type
+            // remaining fields (timestamp):
+            0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
+
+        let signature = app.sign(&some_message2).unwrap();
         println!("{:#?}", signature.to_vec());
+    }
+
+    #[test]
+    fn sign_many() {
+        use CosmosValidatorApp;
+
+        let app = CosmosValidatorApp::connect().unwrap();
+
+        // First, get public key
+        let resp = app.public_key();
+        match resp {
+            Ok(pk) => {
+                assert_eq!(pk.len(), 32);
+                println!("{:?}", pk);
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+            }
+        }
+
+
+        // Now send several votes
+        for index in 50u8..254u8 {
+            let some_message1 = [
+                0x8,                                    // (field_number << 3) | wire_type
+                0x1,                                    // PrevoteType
+                0x11,                                   // (field_number << 3) | wire_type
+                index, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
+                0x19,                                   // (field_number << 3) | wire_type
+                0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+                0x22, // (field_number << 3) | wire_type
+                // remaining fields (timestamp):
+                0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
+
+            let signature = app.sign(&some_message1);
+            match signature {
+                Ok(sig) => {
+//                    println!("{:#?}", sig.to_vec());
+                },
+                Err(e) => {
+                    println!("Err {:#?}", e);
+                }
+            }
+        }
     }
 }
