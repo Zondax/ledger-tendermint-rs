@@ -17,10 +17,6 @@
 #[macro_use]
 extern crate quick_error;
 
-#[cfg(test)]
-#[macro_use]
-extern crate matches;
-
 extern crate byteorder;
 extern crate ledger;
 
@@ -45,6 +41,9 @@ quick_error! {
         }
         InvalidPK{
             description("received an invalid PK")
+        }
+        NoSignature {
+            description("received no signature back")
         }
         InvalidSignature {
             description("received an invalid signature")
@@ -194,6 +193,10 @@ impl CosmosValidatorApp {
             response = self.app.exchange(_command)?;
         }
 
+        if response.data.len() == 0 && response.retcode == 0x9000 {
+            return Err(Error::NoSignature);
+        }
+
         // Last response should contain the answer
         if response.data.len() != 64 {
             return Err(Error::InvalidSignature);
@@ -204,6 +207,16 @@ impl CosmosValidatorApp {
         Ok(array)
     }
 }
+
+#[cfg(test)]
+#[macro_use]
+extern crate matches;
+
+#[cfg(test)]
+extern crate sha2;
+
+#[cfg(test)]
+extern crate ed25519_dalek;
 
 #[cfg(test)]
 mod tests {
@@ -259,8 +272,7 @@ mod tests {
 
         assert_eq!(version.mode, 0xFF);
         assert_eq!(version.major, 0x00);
-        assert_eq!(version.minor, 0x02);
-        assert_eq!(version.patch, 0x00);
+        assert!(version.minor >= 0x02);
     }
 
     #[test]
@@ -296,22 +308,10 @@ mod tests {
     }
 
     #[test]
-    fn sign() {
+    fn sign_verify() {
         use CosmosValidatorApp;
 
         let app = CosmosValidatorApp::connect().unwrap();
-
-        // First, get public key
-        let resp = app.public_key();
-        match resp {
-            Ok(pk) => {
-                assert_eq!(pk.len(), 32);
-                println!("PK {:0X?}", pk);
-            }
-            Err(err) => {
-                eprintln!("Error: {:?}", err);
-            }
-        }
 
         let some_message1 = [
             0x8,                                    // (field_number << 3) | wire_type
@@ -341,7 +341,27 @@ mod tests {
             0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
 
         match app.sign(&some_message2) {
-            Ok(sig) => { println!("{:#?}", sig.to_vec()); }
+            Ok(sig) => {
+                use sha2::Sha512;
+                use sha2::Digest;
+                use ed25519_dalek::PublicKey;
+                use ed25519_dalek::Signature;
+
+                println!("{:#?}", sig.to_vec());
+
+                // First, get public key
+                let public_key_bytes = app.public_key().unwrap();
+                let public_key = PublicKey::from_bytes(&public_key_bytes).unwrap();
+                let signature = Signature::from_bytes(&sig).unwrap();
+
+                // Hash message
+                let mut hasher = Sha512::new();
+                hasher.input(&some_message2);
+                let digest = hasher.result();
+
+                // Verify signature
+                assert!(public_key.verify::<Sha512>(&digest, &signature).is_ok());
+            }
             Err(e) => { println!("Err {:#?}", e); }
         }
     }
