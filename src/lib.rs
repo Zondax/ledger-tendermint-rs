@@ -270,9 +270,14 @@ mod tests {
 
         let version = app.version().unwrap();
 
+        println!("mode  {}", version.mode);
+        println!("major {}", version.major);
+        println!("minor {}", version.minor);
+        println!("patch {}", version.patch);
+
         assert_eq!(version.mode, 0xFF);
         assert_eq!(version.major, 0x00);
-        assert!(version.minor >= 0x02);
+        assert!(version.minor >= 0x04);
     }
 
     #[test]
@@ -354,13 +359,8 @@ mod tests {
                 let public_key = PublicKey::from_bytes(&public_key_bytes).unwrap();
                 let signature = Signature::from_bytes(&sig).unwrap();
 
-                // Hash message
-                let mut hasher = Sha512::new();
-                hasher.input(&some_message2);
-                let digest = hasher.result();
-
                 // Verify signature
-                assert!(public_key.verify::<Sha512>(&digest, &signature).is_ok());
+                assert!(public_key.verify::<Sha512>(&some_message2, &signature).is_ok());
             }
             Err(e) => { println!("Err {:#?}", e); }
         }
