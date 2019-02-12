@@ -1,6 +1,6 @@
 [package]
 name = "ledger-cosmos"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["ZondaX GmbH <info@zondax.ch>"]
 description = "Library to integrate with ledger nano s apps"
 homepage = "https://github.com/ZondaX/ledger-cosmos-rs"
@@ -15,7 +15,7 @@ name = "ledger_cosmos"
 
 [dependencies]
 #ledger = { path = "../ledger-rs" }
-ledger = "0.0.9"
+ledger = "0.1.0"
 quick-error = "1.2.2"
 byteorder = "1.2.4"
 matches = "0.1.8"
