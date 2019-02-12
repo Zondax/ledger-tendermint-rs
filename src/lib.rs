@@ -219,7 +219,18 @@ extern crate sha2;
 extern crate ed25519_dalek;
 
 #[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
+
+#[cfg(test)]
 mod tests {
+    use CosmosValidatorApp;
+    use std::sync::Mutex;
+
+    lazy_static! {
+        static ref APP: Mutex<CosmosValidatorApp> = Mutex::new(CosmosValidatorApp::connect().unwrap());
+    }
+
     #[test]
     fn derivation_path() {
         use to_bip32array;
@@ -264,27 +275,30 @@ mod tests {
 
     #[test]
     fn version() {
-        use CosmosValidatorApp;
+        let app = APP.lock().unwrap();
 
-        let app = CosmosValidatorApp::connect().unwrap();
+        let resp = app.version();
 
-        let version = app.version().unwrap();
+        match resp {
+            Ok(version) => {
+                println!("mode  {}", version.mode);
+                println!("major {}", version.major);
+                println!("minor {}", version.minor);
+                println!("patch {}", version.patch);
 
-        println!("mode  {}", version.mode);
-        println!("major {}", version.major);
-        println!("minor {}", version.minor);
-        println!("patch {}", version.patch);
-
-        assert_eq!(version.mode, 0xFF);
-        assert_eq!(version.major, 0x00);
-        assert!(version.minor >= 0x04);
+                assert_eq!(version.mode, 0xFF);
+                assert_eq!(version.major, 0x00);
+                assert!(version.minor >= 0x04);
+            }
+            Err(err) => {
+                eprintln!("Error: {:?}", err);
+            }
+        }
     }
 
     #[test]
     fn public_key() {
-        use CosmosValidatorApp;
-
-        let app = CosmosValidatorApp::connect().unwrap();
+        let app = APP.lock().unwrap();
         let resp = app.public_key();
 
         match resp {
@@ -300,10 +314,9 @@ mod tests {
 
     #[test]
     fn sign_empty() {
-        use CosmosValidatorApp;
         use Error;
 
-        let app = CosmosValidatorApp::connect().unwrap();
+        let app = APP.lock().unwrap();
 
         let some_message0 = b"";
 
@@ -314,9 +327,7 @@ mod tests {
 
     #[test]
     fn sign_verify() {
-        use CosmosValidatorApp;
-
-        let app = CosmosValidatorApp::connect().unwrap();
+        let app = APP.lock().unwrap();
 
         let some_message1 = [
             0x8,                                    // (field_number << 3) | wire_type
@@ -348,7 +359,6 @@ mod tests {
         match app.sign(&some_message2) {
             Ok(sig) => {
                 use sha2::Sha512;
-                use sha2::Digest;
                 use ed25519_dalek::PublicKey;
                 use ed25519_dalek::Signature;
 
@@ -368,9 +378,7 @@ mod tests {
 
     #[test]
     fn sign_many() {
-        use CosmosValidatorApp;
-
-        let app = CosmosValidatorApp::connect().unwrap();
+        let app = APP.lock().unwrap();
 
         // First, get public key
         let resp = app.public_key();
