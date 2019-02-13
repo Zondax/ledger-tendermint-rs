@@ -1,5 +1,5 @@
 /*******************************************************************************
-*   (c) 2018 ZondaX GmbH
+*   (c) 2018, 2019 ZondaX GmbH
 *
 *  Licensed under the Apache License, Version 2.0 (the "License");
 *  you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 *  See the License for the specific language governing permissions and
 *  limitations under the License.
 ********************************************************************************/
-//! Provider for Ledger cosmos validator app
+//! Provider for Ledger Tendermint validator app
 #[macro_use]
 extern crate quick_error;
 
@@ -61,12 +61,12 @@ quick_error! {
 }
 
 #[allow(dead_code)]
-pub struct CosmosValidatorApp
+pub struct TendermintValidatorApp
 {
     app: ledger::LedgerApp
 }
 
-unsafe impl Send for CosmosValidatorApp {}
+unsafe impl Send for TendermintValidatorApp {}
 
 #[allow(dead_code)]
 pub struct Version {
@@ -76,25 +76,10 @@ pub struct Version {
     patch: u8,
 }
 
-fn to_bip32array(path: &[u32]) -> Result<Vec<u8>, Error> {
-    use byteorder::{LittleEndian, WriteBytesExt};
-
-    if path.len() > 10 {
-        return Err(Error::InvalidDerivationPath);
-    }
-
-    let mut answer = Vec::new();
-    answer.write_u8(path.len() as u8).unwrap();
-
-    for v in path { answer.write_u32::<LittleEndian>(*v).unwrap(); }
-
-    Ok(answer)
-}
-
-impl CosmosValidatorApp {
+impl TendermintValidatorApp {
     pub fn connect() -> Result<Self, Error> {
         let app = ledger::LedgerApp::new()?;
-        Ok(CosmosValidatorApp { app })
+        Ok(TendermintValidatorApp { app })
     }
 
     pub fn version(&self) -> Result<Version, Error> {
@@ -129,21 +114,13 @@ impl CosmosValidatorApp {
     pub fn public_key(&self) -> Result<[u8; 32], Error> {
         use ledger::ApduCommand;
 
-        // TODO: Define what to do with the derivation path
-        let mut bip32 = vec![44, 118, 0, 0, 0];
-        for i in &mut bip32 {
-            *i |= 0x8000_0000;
-        }
-
-        let bip32path = to_bip32array(&bip32)?;
-
         let command = ApduCommand {
             cla: CLA,
             ins: INS_PUBLIC_KEY_ED25519,
             p1: 0x00,
             p2: 0x00,
-            length: bip32path.len() as u8,
-            data: bip32path,
+            length: 0,
+            data: Vec::new(),
         };
 
         let response = self.app.exchange(command)?;
@@ -224,53 +201,37 @@ extern crate lazy_static;
 
 #[cfg(test)]
 mod tests {
-    use CosmosValidatorApp;
     use std::sync::Mutex;
+    use crate::Error;
+    use crate::TendermintValidatorApp;
+    use std::time::{Duration, Instant};
 
     lazy_static! {
-        static ref APP: Mutex<CosmosValidatorApp> = Mutex::new(CosmosValidatorApp::connect().unwrap());
+        static ref APP: Mutex<TendermintValidatorApp> =
+            Mutex::new(TendermintValidatorApp::connect().unwrap());
     }
 
-    #[test]
-    fn derivation_path() {
-        use to_bip32array;
+    fn get_fake_proposal(index: u64, round: i64) -> Vec<u8> {
+        use byteorder::{LittleEndian, WriteBytesExt};
+        let other: [u8; 12] = [0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
 
-        let mut answer = to_bip32array(&vec![1]).unwrap();
-        assert_eq!(answer, b"\x01\
-                             \x01\x00\x00\x00");
+        let mut message = Vec::new();
 
-        answer = to_bip32array(&vec![1, 2]).unwrap();
-        assert_eq!(answer, b"\x02\
-                             \x01\x00\x00\x00\
-                             \x02\x00\x00\x00");
+        message.write_u8(0x08).unwrap();                        // (field_number << 3) | wire_type
+        message.write_u8(0x01).unwrap();                        // PrevoteType
 
-        answer = to_bip32array(&vec![1, 2, 12345]).unwrap();
-        assert_eq!(answer, b"\x03\
-                             \x01\x00\x00\x00\
-                             \x02\x00\x00\x00\
-                             \x39\x30\x00\x00");
+        message.write_u8(0x11).unwrap();                        // (field_number << 3) | wire_type
+        message.write_u64::<LittleEndian>(index).unwrap();
 
-        answer = to_bip32array(&vec![44, 118, 0, 0, 0]).unwrap();
-        assert_eq!(answer, b"\x05\
-                             \x2c\x00\x00\x00\
-                             \x76\x00\x00\x00\
-                             \x00\x00\x00\x00\
-                             \x00\x00\x00\x00\
-                             \x00\x00\x00\x00");
+        message.write_u8(0x19).unwrap();                        // (field_number << 3) | wire_type
+        message.write_i64::<LittleEndian>(round).unwrap();
 
-        answer = to_bip32array(&vec![
-            44 | 0x80000000,
-            118 | 0x80000000,
-            0 | 0x80000000,
-            0 | 0x80000000,
-            0 | 0x80000000]).unwrap();
+        // remaining fields (timestamp, not checked):
+        message.write_u8(0x22).unwrap();                        // (field_number << 3) | wire_type
+        message.extend_from_slice(&other);
 
-        assert_eq!(answer, b"\x05\
-                             \x2c\x00\x00\x80\
-                             \x76\x00\x00\x80\
-                             \x00\x00\x00\x80\
-                             \x00\x00\x00\x80\
-                             \x00\x00\x00\x80");
+        // Increase index
+        message
     }
 
     #[test]
@@ -314,8 +275,6 @@ mod tests {
 
     #[test]
     fn sign_empty() {
-        use Error;
-
         let app = APP.lock().unwrap();
 
         let some_message0 = b"";
@@ -329,33 +288,13 @@ mod tests {
     fn sign_verify() {
         let app = APP.lock().unwrap();
 
-        let some_message1 = [
-            0x8,                                    // (field_number << 3) | wire_type
-            0x1,                                    // PrevoteType
-            0x11,                                   // (field_number << 3) | wire_type
-            0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-            0x19,                                   // (field_number << 3) | wire_type
-            0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
-            0x22, // (field_number << 3) | wire_type
-            // remaining fields (timestamp):
-            0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
-
+        let some_message1 = get_fake_proposal(5, 0);
         match app.sign(&some_message1) {
             Ok(sig) => { println!("{:#?}", sig.to_vec()); }
             Err(e) => { println!("Err {:#?}", e); }
         }
 
-        let some_message2 = [
-            0x8,                                    // (field_number << 3) | wire_type
-            0x1,                                    // PrevoteType
-            0x11,                                   // (field_number << 3) | wire_type
-            0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-            0x19,                                   // (field_number << 3) | wire_type
-            0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
-            0x22, // (field_number << 3) | wire_type
-            // remaining fields (timestamp):
-            0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
-
+        let some_message2 = get_fake_proposal(6, 0);
         match app.sign(&some_message2) {
             Ok(sig) => {
                 use sha2::Sha512;
@@ -413,4 +352,21 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn quick_benchmark() {
+        let app = APP.lock().unwrap();
+
+        // initialize app with a vote
+        let msg = get_fake_proposal(0, 100);
+        app.sign(&msg).unwrap();
+
+        let start = Instant::now();
+        // Now send several votes
+        for i in 1u64..20u64 {
+            app.sign(&get_fake_proposal(i, 100)).unwrap();
+        }
+        let duration = start.elapsed();
+        println!("Elapsed {:?}", duration);    }
+
 }
