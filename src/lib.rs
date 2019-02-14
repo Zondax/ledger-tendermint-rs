@@ -216,6 +216,7 @@ mod tests {
         let other: [u8; 12] = [0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
 
         let mut message = Vec::new();
+        message.write_u8(0).unwrap();                           // (field_number << 3) | wire_type
 
         message.write_u8(0x08).unwrap();                        // (field_number << 3) | wire_type
         message.write_u8(0x01).unwrap();                        // PrevoteType
@@ -231,6 +232,7 @@ mod tests {
         message.extend_from_slice(&other);
 
         // Increase index
+        message[0] = message.len() as u8 - 1;
         message
     }
 
@@ -269,6 +271,7 @@ mod tests {
             }
             Err(err) => {
                 eprintln!("Error: {:?}", err);
+                panic!()
             }
         }
     }
@@ -289,10 +292,7 @@ mod tests {
         let app = APP.lock().unwrap();
 
         let some_message1 = get_fake_proposal(5, 0);
-        match app.sign(&some_message1) {
-            Ok(sig) => { println!("{:#?}", sig.to_vec()); }
-            Err(e) => { println!("Err {:#?}", e); }
-        }
+        app.sign(&some_message1).unwrap();
 
         let some_message2 = get_fake_proposal(6, 0);
         match app.sign(&some_message2) {
@@ -311,7 +311,10 @@ mod tests {
                 // Verify signature
                 assert!(public_key.verify::<Sha512>(&some_message2, &signature).is_ok());
             }
-            Err(e) => { println!("Err {:#?}", e); }
+            Err(e) => {
+                println!("Err {:#?}", e);
+                panic!();
+            }
         }
     }
 
@@ -320,17 +323,7 @@ mod tests {
         let app = APP.lock().unwrap();
 
         // First, get public key
-        let resp = app.public_key();
-        match resp {
-            Ok(pk) => {
-                assert_eq!(pk.len(), 32);
-                println!("{:?}", pk);
-            }
-            Err(err) => {
-                eprintln!("Error: {:?}", err);
-            }
-        }
-
+        let resp = app.public_key().unwrap();
 
         // Now send several votes
         for index in 50u8..254u8 {
@@ -348,7 +341,10 @@ mod tests {
             let signature = app.sign(&some_message1);
             match signature {
                 Ok(sig) => { println!("{:#?}", sig.to_vec()); }
-                Err(e) => { println!("Err {:#?}", e); }
+                Err(e) => {
+                    println!("Err {:#?}", e);
+                    panic!();
+                }
             }
         }
     }
@@ -367,6 +363,6 @@ mod tests {
             app.sign(&get_fake_proposal(i, 100)).unwrap();
         }
         let duration = start.elapsed();
-        println!("Elapsed {:?}", duration);    }
-
+        println!("Elapsed {:?}", duration);
+    }
 }
