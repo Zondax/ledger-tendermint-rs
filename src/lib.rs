@@ -63,7 +63,8 @@ quick_error! {
 #[allow(dead_code)]
 pub struct TendermintValidatorApp
 {
-    app: ledger::LedgerApp
+    app: ledger::LedgerApp,
+    error_state: bool,
 }
 
 unsafe impl Send for TendermintValidatorApp {}
@@ -79,7 +80,11 @@ pub struct Version {
 impl TendermintValidatorApp {
     pub fn connect() -> Result<Self, Error> {
         let app = ledger::LedgerApp::new()?;
-        Ok(TendermintValidatorApp { app })
+        Ok(TendermintValidatorApp { app, error_state: false })
+    }
+
+    pub fn set_logging(&mut self, val: bool) {
+        self.app.set_logging(val);
     }
 
     pub fn version(&self) -> Result<Version, Error> {
@@ -95,11 +100,6 @@ impl TendermintValidatorApp {
         };
 
         let response = self.app.exchange(command)?;
-
-        // TODO: this is just temporary, ledger errors should check for 0x9000
-        if response.retcode != 0x9000 {
-            return Err(Error::InvalidVersion);
-        }
 
         let version = Version {
             mode: response.data[0],
@@ -123,10 +123,14 @@ impl TendermintValidatorApp {
             data: Vec::new(),
         };
 
+        if self.app.logging() {
+            println!("{:#?}", command);
+        }
+
         let response = self.app.exchange(command)?;
 
-        if response.retcode != 0x9000 {
-            println!("WARNING: retcode={:X?}", response.retcode);
+        if self.app.logging() {
+            println!("{:#?}", response);
         }
 
         if response.data.len() != 32 {
@@ -205,10 +209,11 @@ mod tests {
     use crate::Error;
     use crate::TendermintValidatorApp;
     use std::time::Instant;
+    use std::thread;
+    use core::time;
 
     lazy_static! {
-        static ref APP: Mutex<TendermintValidatorApp> =
-            Mutex::new(TendermintValidatorApp::connect().unwrap());
+        static ref TEST_MUTEX: Mutex<Vec<u8>> = Mutex::new(vec![]);
     }
 
     fn get_fake_proposal(index: u64, round: i64) -> Vec<u8> {
@@ -238,7 +243,8 @@ mod tests {
 
     #[test]
     fn version() {
-        let app = APP.lock().unwrap();
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+        let app = TendermintValidatorApp::connect().unwrap();
 
         let resp = app.version();
 
@@ -261,24 +267,34 @@ mod tests {
 
     #[test]
     fn public_key() {
-        let app = APP.lock().unwrap();
-        let resp = app.public_key();
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+        let app = TendermintValidatorApp::connect().unwrap();
 
-        match resp {
-            Ok(pk) => {
-                assert_eq!(pk.len(), 32);
-                println!("PK {:0X?}", pk);
+        let resp = app.public_key().unwrap();
+
+        assert_eq!(resp.len(), 32);
+        println!("PK {:0X?}", resp);
+    }
+
+    #[test]
+    fn public_key_manual_reconnect() {
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+
+        for i in 1u64..5000u64 {
+            if let Ok(app) = TendermintValidatorApp::connect() {
+                match app.public_key() {
+                    Ok(pk) => println!("PK {:0X?}", pk),
+                    Err(_e) => println!("Err")
+                }
             }
-            Err(err) => {
-                eprintln!("Error: {:?}", err);
-                panic!()
-            }
+            thread::sleep(time::Duration::from_millis(100));
         }
     }
 
     #[test]
     fn sign_empty() {
-        let app = APP.lock().unwrap();
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+        let app = TendermintValidatorApp::connect().unwrap();
 
         let some_message0 = b"";
 
@@ -289,37 +305,36 @@ mod tests {
 
     #[test]
     fn sign_verify() {
-        let app = APP.lock().unwrap();
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+
+        let app = TendermintValidatorApp::connect().unwrap();
 
         let some_message1 = get_fake_proposal(5, 0);
         app.sign(&some_message1).unwrap();
 
         let some_message2 = get_fake_proposal(6, 0);
-        match app.sign(&some_message2) {
-            Ok(sig) => {
-                use ed25519_dalek::PublicKey;
-                use ed25519_dalek::Signature;
 
-                println!("{:#?}", sig.to_vec());
+        let sig = app.sign(&some_message2).unwrap();
 
-                // First, get public key
-                let public_key_bytes = app.public_key().unwrap();
-                let public_key = PublicKey::from_bytes(&public_key_bytes).unwrap();
-                let signature = Signature::from_bytes(&sig).unwrap();
+        use sha2::Sha512;
+        use ed25519_dalek::PublicKey;
+        use ed25519_dalek::Signature;
 
-                // Verify signature
-                assert!(public_key.verify(&some_message2, &signature).is_ok());
-            }
-            Err(e) => {
-                println!("Err {:#?}", e);
-                panic!();
-            }
-        }
+        println!("{:#?}", sig.to_vec());
+
+        // First, get public key
+        let public_key_bytes = app.public_key().unwrap();
+        let public_key = PublicKey::from_bytes(&public_key_bytes).unwrap();
+        let signature = Signature::from_bytes(&sig).unwrap();
+
+        // Verify signature
+        assert!(public_key.verify::<Sha512>(&some_message2, &signature).is_ok());
     }
 
     #[test]
     fn sign_many() {
-        let app = APP.lock().unwrap();
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+        let app = TendermintValidatorApp::connect().unwrap();
 
         // First, get public key
         let _resp = app.public_key().unwrap();
@@ -337,20 +352,15 @@ mod tests {
                 // remaining fields (timestamp):
                 0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
 
-            let signature = app.sign(&some_message1);
-            match signature {
-                Ok(sig) => { println!("{:#?}", sig.to_vec()); }
-                Err(e) => {
-                    println!("Err {:#?}", e);
-                    panic!();
-                }
-            }
+            let sig = app.sign(&some_message1).unwrap();
+            println!("{:#?}", sig.to_vec());
         }
     }
 
     #[test]
     fn quick_benchmark() {
-        let app = APP.lock().unwrap();
+        let _test_mutex = TEST_MUTEX.lock().unwrap();
+        let app = TendermintValidatorApp::connect().unwrap();
 
         // initialize app with a vote
         let msg = get_fake_proposal(0, 100);
