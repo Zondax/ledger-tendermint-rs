@@ -204,7 +204,7 @@ mod tests {
     use std::sync::Mutex;
     use crate::Error;
     use crate::TendermintValidatorApp;
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     lazy_static! {
         static ref APP: Mutex<TendermintValidatorApp> =
@@ -297,7 +297,6 @@ mod tests {
         let some_message2 = get_fake_proposal(6, 0);
         match app.sign(&some_message2) {
             Ok(sig) => {
-                use sha2::Sha512;
                 use ed25519_dalek::PublicKey;
                 use ed25519_dalek::Signature;
 
@@ -309,7 +308,7 @@ mod tests {
                 let signature = Signature::from_bytes(&sig).unwrap();
 
                 // Verify signature
-                assert!(public_key.verify::<Sha512>(&some_message2, &signature).is_ok());
+                assert!(public_key.verify(&some_message2, &signature).is_ok());
             }
             Err(e) => {
                 println!("Err {:#?}", e);
@@ -323,7 +322,7 @@ mod tests {
         let app = APP.lock().unwrap();
 
         // First, get public key
-        let resp = app.public_key().unwrap();
+        let _resp = app.public_key().unwrap();
 
         // Now send several votes
         for index in 50u8..254u8 {
