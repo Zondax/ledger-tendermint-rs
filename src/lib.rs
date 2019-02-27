@@ -277,21 +277,6 @@ mod tests {
     }
 
     #[test]
-    fn public_key_manual_reconnect() {
-        let _test_mutex = TEST_MUTEX.lock().unwrap();
-
-        for i in 1u64..5000u64 {
-            if let Ok(app) = TendermintValidatorApp::connect() {
-                match app.public_key() {
-                    Ok(pk) => println!("PK {:0X?}", pk),
-                    Err(_e) => println!("Err")
-                }
-            }
-            thread::sleep(time::Duration::from_millis(100));
-        }
-    }
-
-    #[test]
     fn sign_empty() {
         let _test_mutex = TEST_MUTEX.lock().unwrap();
         let app = TendermintValidatorApp::connect().unwrap();
@@ -316,7 +301,6 @@ mod tests {
 
         let sig = app.sign(&some_message2).unwrap();
 
-        use sha2::Sha512;
         use ed25519_dalek::PublicKey;
         use ed25519_dalek::Signature;
 
@@ -328,7 +312,7 @@ mod tests {
         let signature = Signature::from_bytes(&sig).unwrap();
 
         // Verify signature
-        assert!(public_key.verify::<Sha512>(&some_message2, &signature).is_ok());
+        assert!(public_key.verify(&some_message2, &signature).is_ok());
     }
 
     #[test]
