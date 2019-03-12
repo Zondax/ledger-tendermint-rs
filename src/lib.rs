@@ -61,9 +61,8 @@ quick_error! {
 }
 
 #[allow(dead_code)]
-pub struct TendermintValidatorApp
-{
-    app: ledger::LedgerApp
+pub struct TendermintValidatorApp {
+    app: ledger::LedgerApp,
 }
 
 unsafe impl Send for TendermintValidatorApp {}
@@ -140,8 +139,8 @@ impl TendermintValidatorApp {
 
     // Sign message
     pub fn sign(&self, message: &[u8]) -> Result<[u8; 64], Error> {
-        use ledger::ApduCommand;
         use ledger::ApduAnswer;
+        use ledger::ApduCommand;
 
         let chunks = message.chunks(USER_MESSAGE_CHUNK_SIZE);
 
@@ -154,7 +153,10 @@ impl TendermintValidatorApp {
         }
 
         let packet_count = chunks.len() as u8;
-        let mut response: ApduAnswer = ApduAnswer { data: vec![], retcode: 0 };
+        let mut response: ApduAnswer = ApduAnswer {
+            data: vec![],
+            retcode: 0,
+        };
 
         // Send message chunks
         for (packet_idx, chunk) in chunks.enumerate() {
@@ -201,9 +203,9 @@ extern crate lazy_static;
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
     use crate::Error;
     use crate::TendermintValidatorApp;
+    use std::sync::Mutex;
     use std::time::Instant;
 
     lazy_static! {
@@ -213,22 +215,24 @@ mod tests {
 
     fn get_fake_proposal(index: u64, round: i64) -> Vec<u8> {
         use byteorder::{LittleEndian, WriteBytesExt};
-        let other: [u8; 12] = [0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
+        let other: [u8; 12] = [
+            0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1,
+        ];
 
         let mut message = Vec::new();
-        message.write_u8(0).unwrap();                           // (field_number << 3) | wire_type
+        message.write_u8(0).unwrap(); // (field_number << 3) | wire_type
 
-        message.write_u8(0x08).unwrap();                        // (field_number << 3) | wire_type
-        message.write_u8(0x01).unwrap();                        // PrevoteType
+        message.write_u8(0x08).unwrap(); // (field_number << 3) | wire_type
+        message.write_u8(0x01).unwrap(); // PrevoteType
 
-        message.write_u8(0x11).unwrap();                        // (field_number << 3) | wire_type
+        message.write_u8(0x11).unwrap(); // (field_number << 3) | wire_type
         message.write_u64::<LittleEndian>(index).unwrap();
 
-        message.write_u8(0x19).unwrap();                        // (field_number << 3) | wire_type
+        message.write_u8(0x19).unwrap(); // (field_number << 3) | wire_type
         message.write_i64::<LittleEndian>(round).unwrap();
 
         // remaining fields (timestamp, not checked):
-        message.write_u8(0x22).unwrap();                        // (field_number << 3) | wire_type
+        message.write_u8(0x22).unwrap(); // (field_number << 3) | wire_type
         message.extend_from_slice(&other);
 
         // Increase index
@@ -284,7 +288,10 @@ mod tests {
 
         let signature = app.sign(some_message0);
         assert!(signature.is_err());
-        assert!(matches!(signature.err().unwrap(), Error::InvalidEmptyMessage));
+        assert!(matches!(
+            signature.err().unwrap(),
+            Error::InvalidEmptyMessage
+        ));
     }
 
     #[test]
@@ -327,19 +334,22 @@ mod tests {
         // Now send several votes
         for index in 50u8..254u8 {
             let some_message1 = [
-                0x8,                                    // (field_number << 3) | wire_type
-                0x1,                                    // PrevoteType
-                0x11,                                   // (field_number << 3) | wire_type
-                index, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-                0x19,                                   // (field_number << 3) | wire_type
-                0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+                0x8,  // (field_number << 3) | wire_type
+                0x1,  // PrevoteType
+                0x11, // (field_number << 3) | wire_type
+                index, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,  // height
+                0x19, // (field_number << 3) | wire_type
+                0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,  // round
                 0x22, // (field_number << 3) | wire_type
                 // remaining fields (timestamp):
-                0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1];
+                0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1,
+            ];
 
             let signature = app.sign(&some_message1);
             match signature {
-                Ok(sig) => { println!("{:#?}", sig.to_vec()); }
+                Ok(sig) => {
+                    println!("{:#?}", sig.to_vec());
+                }
                 Err(e) => {
                     println!("Err {:#?}", e);
                     panic!();
