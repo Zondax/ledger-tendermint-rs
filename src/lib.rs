@@ -172,7 +172,7 @@ impl TendermintValidatorApp {
             response = self.app.exchange(_command)?;
         }
 
-        if response.data.len() == 0 && response.retcode == 0x9000 {
+        if response.data.is_empty() && response.retcode == 0x9000 {
             return Err(Error::NoSignature);
         }
 
