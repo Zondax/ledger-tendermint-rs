@@ -116,19 +116,25 @@ impl TendermintValidatorApp {
             data: Vec::new(),
         };
 
-        let response = self.app.exchange(command)?;
+        match self.app.exchange(command) {
+            Ok(response) => {
+                if response.retcode != 0x9000 {
+                    println!("WARNING: retcode={:X?}", response.retcode);
+                }
 
-        if response.retcode != 0x9000 {
-            println!("WARNING: retcode={:X?}", response.retcode);
+                if response.data.len() != 32 {
+                    return Err(Error::InvalidPK);
+                }
+
+                let mut array = [0u8; 32];
+                array.copy_from_slice(&response.data[..32]);
+                Ok(array)
+            },
+            Err(err) => {
+                // TODO: Friendly error
+                return Err(Error::Ledger(err));
+            }
         }
-
-        if response.data.len() != 32 {
-            return Err(Error::InvalidPK);
-        }
-
-        let mut array = [0u8; 32];
-        array.copy_from_slice(&response.data[..32]);
-        Ok(array)
     }
 
     // Sign message

@@ -34,7 +34,9 @@ impl Ed25519LedgerTmAppSigner {
             Ok(validator_app) => {
                 let app = Arc::new(Mutex::new(validator_app));
                 let signer = Ed25519LedgerTmAppSigner { app };
-                let _pk = signer.public_key().unwrap();
+
+                // FIXME: Confirm minimum version
+                let _pk = signer.public_key()?;
                 Ok(signer)
             }
             Err(err) => Err(Error::new(ErrorKind::ProviderError, Some(&err.to_string()))),
