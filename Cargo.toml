@@ -1,7 +1,7 @@
 [package]
 name = "ledger-tendermint"
 description = "Library to integrate with the Ledger Tendermint app"
-version = "0.3.2"
+version = "0.4.0"
 license = "Apache-2.0"
 authors = ["ZondaX GmbH <info@zondax.ch>"]
 homepage = "https://github.com/ZondaX/ledger-tendermint-rs"
