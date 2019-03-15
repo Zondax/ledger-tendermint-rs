@@ -5,12 +5,12 @@
 
 #[macro_use]
 extern crate criterion;
-extern crate ledger_tendermint;
 
 use criterion::Criterion;
+use ledger_tendermint::ledgertm::TendermintValidatorApp;
 
 fn pubkey_ed25519(c: &mut Criterion) {
-    let app = ledger_tendermint::TendermintValidatorApp::connect().unwrap();
+    let app = TendermintValidatorApp::connect().unwrap();
 
     c.bench_function("ledger-tm: Ed25519 get public key", move |b| {
         b.iter(|| app.public_key());
@@ -44,7 +44,7 @@ fn get_fake_proposal(index: &mut u64, round: i64) -> Vec<u8> {
 }
 
 fn sign_votes(c: &mut Criterion) {
-    let app = ledger_tendermint::TendermintValidatorApp::connect().unwrap();
+    let app = TendermintValidatorApp::connect().unwrap();
 
     let mut index: u64 = 0;
 
