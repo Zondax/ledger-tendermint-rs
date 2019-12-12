@@ -17,8 +17,8 @@ use std::sync::{Arc, Mutex};
 
 use signatory::{
     ed25519::{PublicKey, Signature},
-    error::{Error, ErrorKind},
-    PublicKeyed, Signer,
+    signature::{Signer, Error},
+    public_key::PublicKeyed,
 };
 use crate::ledgertm::TendermintValidatorApp;
 
@@ -39,7 +39,7 @@ impl Ed25519LedgerTmAppSigner {
                 let _pk = signer.public_key()?;
                 Ok(signer)
             }
-            Err(err) => Err(Error::new(ErrorKind::ProviderError, Some(&err.to_string()))),
+            Err(err) => Err(Error::from_source(err)),
         }
     }
 }
@@ -51,19 +51,19 @@ impl PublicKeyed<PublicKey> for Ed25519LedgerTmAppSigner {
 
         match app.public_key() {
             Ok(pk) => Ok(PublicKey(pk)),
-            Err(err) => Err(Error::new(ErrorKind::ProviderError, Some(&err.to_string()))),
+            Err(err) => Err(Error::from_source(err)),
         }
     }
 }
 
 impl Signer<Signature> for Ed25519LedgerTmAppSigner {
     /// c: Compute a compact, fixed-sized signature of the given amino/json vote
-    fn sign(&self, msg: &[u8]) -> Result<Signature, Error> {
+    fn try_sign(&self, msg: &[u8]) -> Result<Signature, Error> {
         let app = self.app.lock().unwrap();
 
         match app.sign(&msg) {
             Ok(sig) => Ok(Signature(sig)),
-            Err(err) => Err(Error::new(ErrorKind::ProviderError, Some(&err.to_string()))),
+            Err(err) => Err(Error::from_source(err)),
         }
     }
 }
@@ -71,11 +71,11 @@ impl Signer<Signature> for Ed25519LedgerTmAppSigner {
 #[cfg(test)]
 mod tests {
     use crate::signer::Ed25519LedgerTmAppSigner;
-    use signatory::Signer;
+    use signatory::signature::Signer;
 
     #[test]
     fn public_key() {
-        use signatory::PublicKeyed;
+        use signatory::public_key::PublicKeyed;
         let signer = Ed25519LedgerTmAppSigner::connect().unwrap();
 
         let _pk = signer.public_key().unwrap();
@@ -99,12 +99,12 @@ mod tests {
             0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1,
         ];
 
-        signer.sign(&some_message1).unwrap();
+        signer.sign(&some_message1);
     }
 
     #[test]
     fn sign2() {
-        use signatory::Signer;
+        use signatory::signature::Signer;
 
         let signer = Ed25519LedgerTmAppSigner::connect().unwrap();
 
@@ -121,7 +121,7 @@ mod tests {
             0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1,
         ];
 
-        signer.sign(&some_message1).unwrap();
+        signer.sign(&some_message1);
 
         // Sign message2
         let some_message2 = [
@@ -136,13 +136,13 @@ mod tests {
             0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1,
         ];
 
-        signer.sign(&some_message2).unwrap();
+        signer.sign(&some_message2);
     }
 
     #[test]
     fn sign_many() {
-        use signatory::PublicKeyed;
-        use signatory::Signer;
+        use signatory::public_key::PublicKeyed;
+        use signatory::signature::Signer;
         use Ed25519LedgerTmAppSigner;
 
         let signer = Ed25519LedgerTmAppSigner::connect().unwrap();
@@ -165,7 +165,7 @@ mod tests {
                 0xb, 0x8, 0x80, 0x92, 0xb8, 0xc3, 0x98, 0xfe, 0xff, 0xff, 0xff, 0x1,
             ];
 
-            signer.sign(&some_message).unwrap();
+            signer.sign(&some_message);
         }
     }
 }
